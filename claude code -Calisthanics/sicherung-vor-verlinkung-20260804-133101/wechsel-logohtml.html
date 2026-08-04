@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="color-scheme" content="light">
+<title>Logo</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: #000000;
+    overflow: hidden;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    opacity: 0;
+    animation: fadeIn 0.8s ease-out 0.1s forwards;
+  }
+  @keyframes fadeIn {
+    to { opacity: 1; }
+  }
+  #stars {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+  }
+  #stage {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #logo, #probe {
+    font-family: "Courier New", Consolas, Monaco, monospace;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0;
+    white-space: pre;
+  }
+  #logo {
+    color: #ffffff;
+    background: transparent;
+    margin: 0;
+    user-select: none;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+  }
+  #ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    overflow: visible;
+    filter: drop-shadow(0 0 5px rgba(255,255,255,0.20)) drop-shadow(0 0 14px rgba(255,255,255,0.10));
+  }
+  #probe {
+    position: absolute;
+    visibility: hidden;
+    left: -9999px;
+    top: 0;
+    font-size: 200px;
+  }
+</style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div id="stage">
+  <pre id="logo"></pre>
+  <svg id="ring" viewBox="0 0 100 100">
+    <defs>
+      <filter id="glowSoft" x="-150%" y="-150%" width="400%" height="400%">
+        <feGaussianBlur stdDeviation="1.1" result="b1"/>
+        <feMerge>
+          <feMergeNode in="b1"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+      <filter id="glowStrong" x="-200%" y="-200%" width="500%" height="500%">
+        <feGaussianBlur stdDeviation="2.2" result="b1"/>
+        <feGaussianBlur in="SourceGraphic" stdDeviation="0.6" result="b2"/>
+        <feMerge>
+          <feMergeNode in="b1"/>
+          <feMergeNode in="b2"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+      <filter id="glowNode" x="-300%" y="-300%" width="700%" height="700%">
+        <feGaussianBlur stdDeviation="1.4"/>
+      </filter>
+      <filter id="glowIntense" x="-160%" y="-160%" width="420%" height="420%">
+        <feGaussianBlur stdDeviation="1.2" result="b1"/>
+        <feGaussianBlur stdDeviation="3.0" result="b2"/>
+        <feMerge>
+          <feMergeNode in="b2"/>
+          <feMergeNode in="b1"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+      <linearGradient id="segShade" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#ffffff" stop-opacity="0.42"/>
+        <stop offset="40%" stop-color="#ffffff" stop-opacity="0.06"/>
+        <stop offset="70%" stop-color="#000000" stop-opacity="0.28"/>
+        <stop offset="100%" stop-color="#000000" stop-opacity="0.55"/>
+      </linearGradient>
+      <linearGradient id="innerCopyShade" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
+        <stop offset="50%" stop-color="#ffffff" stop-opacity="0.55"/>
+        <stop offset="100%" stop-color="#ffffff" stop-opacity="0.85"/>
+      </linearGradient>
+    </defs>
+    <g id="ringBgLayer"></g>
+    <g id="ringOuterLayer2"></g>
+    <g id="ringOuterLayer1"></g>
+    <g id="ringDotScale"></g>
+    <g id="ringDotScale2"></g>
+    <g id="ringTicks"></g>
+    <g id="ringMainLayer"></g>
+    <g id="ringInnerCopyLayer"></g>
+    <g id="ringNodes"></g>
+  </svg>
+</div>
+<span id="probe">MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM</span>
+<script>
+(function () {
+  'use strict';
+
+  /* =========================================================
+     KONFIGURATION – hier lässt sich das Logo anpassen
+     ========================================================= */
+
+  // Sternform – 6 Zacken + 6 Kerben, Winkel (Grad) & Länge direkt aus der
+  // Logo-Vorlage vermessen (Kontur-Analyse, links/rechts symmetrisiert).
+  // [Winkel, Radius] abwechselnd Zacke/Kerbe, im Kreis sortiert.
+  const STAR_VERTICES = [
+    [ 18.838, 0.3346], // Kerbe
+    [ 30.818, 0.6747], // Zacke (oben rechts)
+    [ 56.967, 0.2546], // Kerbe
+    [ 90.000, 0.9054], // Zacke (oben)
+    [123.033, 0.2546], // Kerbe
+    [149.182, 0.6747], // Zacke (oben links)
+    [161.162, 0.3346], // Kerbe
+    [196.034, 1.0000], // Zacke (unten links, längste)
+    [218.512, 0.2108], // Kerbe
+    [270.000, 0.8740], // Zacke (unten)
+    [321.488, 0.2108], // Kerbe
+    [343.966, 1.0000]  // Zacke (unten rechts, längste)
+  ];
+
+  const DEPTH        = 0.20;  // "Dicke" des 3D-Körpers
+  const SPIN_SPEED    = 0.85; // Rotationsgeschwindigkeit um die Y-Achse (rad/Sek.)
+  const FIXED_TILT    = 0.18; // feste Kamera-Neigung (rad) - bewegt sich nicht mehr
+
+  const RAMP = " .:-=+*#%@";  // Zeichen von "hell" nach "dunkel"
+  const RAMP_GAMMA = 1.5;     // >1 = insgesamt kräftiger/dunkler
+
+  const COLS = 62;            // Zeichen-Raster Breite (höher = dichter/detaillierter)
+  const SCALE_X = 91;
+  const BASE_ROWS = 30;
+  const BASE_CHAR_ASPECT = 0.4545;
+  const CAM_DIST = 3.4;
+  const SIZE_FRACTION = 0.48; // wie viel vom Bildschirm die gesamte Grafik (Ring+Stern) einnimmt
+  const INVERT_RAMP = true;   // true = helle Zeichen auf dunklem Hintergrund
+
+  // Lade-Ring rundherum (Hauptsegmente)
+  const RING_SEGMENTS = 7;
+  const RING_GAP_DEG = 10;       // Lücke zwischen den Segmenten (Grad)
+  const RING_RADIUS = 42;        // Radius in SVG-Einheiten (viewBox 0..100)
+  const RING_STROKE = 5;         // Strichstärke (etwas dünner)
+  const RING_COLOR_BASE = '#333333'; // Ruhe-Grau — dunkler, damit der Kontrast zu den leuchtenden Segmenten stärker wirkt
+  const RING_COLOR_LIT  = '#f5f5f5'; // helle Farbe beim "Laden"
+  // Gemeinsamer Loop-Zyklus für Hauptring UND Kopie-Ring (beide laufen synchron):
+  // ein schneller, weicher Lichtdurchlauf, danach 1 Sekunde komplett unsichtbar/aus,
+  // dann wiederholt sich alles nahtlos — exakt gleichzeitig für beide Ringe.
+  const RING_LOOP_SWEEP_MS = 900;   // Dauer eines vollen Umlaufs
+  const RING_LOOP_GAP_MS = 1000;    // Pause-Dauer (Ring komplett aus/unsichtbar)
+  const RING_LOOP_FADE_MS = 160;    // sanfte Ein-/Ausblendzeit an den Übergängen für maximale Smoothness
+  const RING_LOOP_CYCLE_MS = RING_LOOP_SWEEP_MS + RING_LOOP_GAP_MS;
+  const RING_LOOP_TRAIL = 1.3;       // Reichweite des Lichtschweifs. Bewusst kompakt gehalten: bei nur
+                                      // 7 Segmenten würde ein breiterer Wert (z.B. 2, wo der Nachbar exakt
+                                      // 50% erreicht) fast die Hälfte des Rings gleichzeitig aufleuchten
+                                      // lassen und wirkt dann "lang" statt wie ein knackiger Lichtpunkt.
+                                      // 1.3 gibt dem direkten Nachbarn noch einen spürbaren, weichen
+                                      // Abglanz (~14%), bleibt aber sichtbar auf 1 aktives Segment fokussiert.
+  const STAR_FRACTION_OF_RING = 0.64; // Stern-Größe relativ zum Ring-Durchmesser (kleiner = kleinerer Stern)
+
+  // Innere Lichtleiste je Hauptsegment — soll sehr hell/strahlend wirken
+  const INNER_LINE_STROKE = 1.3;         // Strichstärke der schmalen Innenlinie
+  const INNER_LINE_COLOR_BASE = '#b8b8b8'; // auch im Ruhezustand schon deutlich sichtbar hell
+  const INNER_LINE_COLOR_LIT  = '#ffffff';
+
+  // Transparenter Kopie-Ring INNERHALB des Hauptrings, nahe der Innenkante:
+  // nur ein dünner heller Rand, keine Füllung/Körper.
+  const INNER_COPY_RADIUS = RING_RADIUS - (RING_STROKE / 2) - 1.4; // rückt nah an die Innenkante des Hauptrings
+  const INNER_COPY_STROKE = 0.9;          // dünn
+  const INNER_COPY_COLOR_BASE = '#9a9a9a';
+  const INNER_COPY_COLOR_LIT  = '#ffffff';
+
+  // Zweiter, sehr dünner Zusatzring direkt außerhalb des Hauptrings
+  const OUTER1_RADIUS = RING_RADIUS + 3.2;
+  const OUTER1_STROKE = 0.6;
+  const OUTER1_ARC_COUNT = 9;
+  const OUTER1_ARC_GAP_DEG = 14;
+  const OUTER1_SPIN_SPEED = -0.12;   // rad/Sek. (gegenläufig, langsam)
+  const OUTER1_COLOR = '#d8d8d8';
+  const OUTER1_OPACITY = 0.7;
+
+  // Zweiter äußerer Bogenring, weiter außen, asymmetrisch
+  const OUTER2_RADIUS = RING_RADIUS + 6.4;
+  const OUTER2_STROKE = 0.5;
+  const OUTER2_SPIN_SPEED = 0.07;
+  const OUTER2_COLOR = '#c0c0c0';
+  const OUTER2_OPACITY = 0.6;
+  // Asymmetrische Bogen-Definitionen: [Start-Grad, Länge-Grad]
+  const OUTER2_ARCS = [
+    [10, 48], [95, 22], [150, 65], [250, 30], [300, 40]
+  ];
+
+  // Punkte-Ring 1: EIN cleaner, gleichmäßiger Kreis aus kleinen Punkten.
+  // Weiter nach außen gerückt, damit zwischen Hauptring und Punktering mehr Luft/Spielraum entsteht.
+  const DOT_SCALE_RADIUS = RING_RADIUS + 5.6;
+  const DOT_SCALE_COUNT = 46;              // gleichmäßig verteilte Punkte, kompletter geschlossener Ring
+  const DOT_SCALE_RADIUS_SIZE = 0.38;
+  const DOT_SCALE_COLOR = '#c4c4c4';
+  const DOT_SCALE_HILITE_COUNT = 6;        // Anzahl der Punkte, die deutlich heller/größer hervorstechen
+  const DOT_SCALE_HILITE_SIZE = 0.68;
+  const DOT_SCALE_SPIN_SPEED = 0.05;
+
+  // Punkte-Ring 2 (NEU): zweiter, weiter außen liegender Punktering — komplett weiße Punkte.
+  const DOT_SCALE2_RADIUS = RING_RADIUS + 7.0;
+  const DOT_SCALE2_COUNT = 58;
+  const DOT_SCALE2_SIZE = 0.3;
+  const DOT_SCALE2_OPACITY = 0.75;
+  const DOT_SCALE2_HILITE_COUNT = 5;
+  const DOT_SCALE2_HILITE_SIZE = 0.56;
+  const DOT_SCALE2_SPIN_SPEED = -0.035;    // leicht gegenläufig zum ersten Punktering
+
+  // Radiale Markierungsstriche (wie Uhr-/Messinstrument)
+  const TICK_COUNT = 36;
+  const TICK_RADIUS_INNER = RING_RADIUS + 4.6;
+  const TICK_RADIUS_OUTER = RING_RADIUS + 5.9;
+  const TICK_COLOR = '#8f8f8f';
+  const TICK_OPACITY = 0.4;
+
+  // Leuchtende Knotenpunkte an Bogenenden
+  const NODE_COLOR = '#ffffff';
+  const NODE_RADIUS = 0.85;
+
+  // Transparente Hintergrund-Kreisflächen (Tiefe)
+  const BG_CIRCLES = [
+    { r: RING_RADIUS - 4, opacity: 0.035 },
+    { r: RING_RADIUS + 2, opacity: 0.02 },
+    { r: RING_RADIUS + 7, opacity: 0.012 }
+  ];
+
+  // Funkelnde Partikel im Hintergrund (Tiefen-Effekt / "3D-Welt")
+  const PARTICLE_DENSITY = 9000;  // Bildschirm-px² pro Partikel (kleiner = mehr Partikel)
+  const PARTICLE_MAX = 260;       // Obergrenze
+  const PARTICLE_DRIFT_DIR = { x: 0.08, y: -0.6 }; // Drift-Richtung: nach oben (wird normalisiert)
+  const PARTICLE_DRIFT_SPEED = 16; // px/Sek. für die nächsten (größten) Partikel
+  const PARTICLE_TWINKLE_MIN = 0.4; // rad/Sek.
+  const PARTICLE_TWINKLE_MAX = 1.4; // rad/Sek.
+  const PARTICLE_DEPTH_BIAS = 1.8;  // >1 = mehr kleine/ferne, wenige große/nahe Partikel
+
+  const LIGHT = normalize({ x: 0.35, y: 0.55, z: 0.78 });
+
+  /* ========================================================= */
+
+  function normalize(v) {
+    const l = Math.hypot(v.x, v.y, v.z);
+    return { x: v.x / l, y: v.y / l, z: v.z / l };
+  }
+
+  function buildPolygon() {
+    return STAR_VERTICES.map(function (v) {
+      const rad = v[0] * Math.PI / 180;
+      const r = v[1];
+      return { x: r * Math.cos(rad), y: r * Math.sin(rad) };
+    });
+  }
+
+  function edgeOutwardNormal(p1, p2) {
+    const ex = p2.x - p1.x, ey = p2.y - p1.y;
+    let nx = ey, ny = -ex;
+    const len = Math.hypot(nx, ny) || 1;
+    nx /= len; ny /= len;
+    const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+    if (nx * mx + ny * my < 0) { nx = -nx; ny = -ny; }
+    return { nx: nx, ny: ny };
+  }
+
+  function boundaryRadius(theta, poly) {
+    const dx = Math.cos(theta), dy = Math.sin(theta);
+    const n = poly.length;
+    for (let i = 0; i < n; i++) {
+      const p1 = poly[i], p2 = poly[(i + 1) % n];
+      const ex = p2.x - p1.x, ey = p2.y - p1.y;
+      const denom = ex * dy - ey * dx;
+      if (Math.abs(denom) < 1e-9) continue;
+      const t = (ex * p1.y - ey * p1.x) / denom;
+      const s = (dx * p1.y - dy * p1.x) / denom;
+      if (t > 1e-6 && s >= -1e-6 && s <= 1 + 1e-6) return t;
+    }
+    return 0;
+  }
+
+  const ANGLE_STEPS = 320, RADIAL_STEPS = 34, EDGE_STEPS = 68, DEPTH_STEPS = 10;
+
+  function buildPoints(poly) {
+    const flat = [];
+    const halfD = DEPTH / 2;
+    for (let ai = 0; ai < ANGLE_STEPS; ai++) {
+      const theta = (ai / ANGLE_STEPS) * Math.PI * 2;
+      const R = boundaryRadius(theta, poly);
+      const cx = Math.cos(theta), cy = Math.sin(theta);
+      for (let ri = 1; ri <= RADIAL_STEPS; ri++) {
+        const t = ri / RADIAL_STEPS;
+        const x = cx * R * t, y = cy * R * t;
+        flat.push(x, y, halfD, 0, 0, 1);
+        flat.push(x, y, -halfD, 0, 0, -1);
+      }
+    }
+    const n = poly.length;
+    for (let i = 0; i < n; i++) {
+      const p1 = poly[i], p2 = poly[(i + 1) % n];
+      const nrm = edgeOutwardNormal(p1, p2);
+      for (let si = 0; si <= EDGE_STEPS; si++) {
+        const s = si / EDGE_STEPS;
+        const x = p1.x + (p2.x - p1.x) * s;
+        const y = p1.y + (p2.y - p1.y) * s;
+        for (let di = 0; di <= DEPTH_STEPS; di++) {
+          const z = -halfD + (di / DEPTH_STEPS) * DEPTH;
+          flat.push(x, y, z, nrm.nx, nrm.ny, 0);
+        }
+      }
+    }
+    return new Float32Array(flat);
+  }
+
+  /* ---------- DOM / Messung ---------- */
+
+  const pre = document.getElementById('logo');
+  const probe = document.getElementById('probe');
+  const stage = document.getElementById('stage');
+  const ringSvg = document.getElementById('ring');
+  const starsCanvas = document.getElementById('stars');
+  const starsCtx = starsCanvas.getContext('2d');
+
+  const driftLen = Math.hypot(PARTICLE_DRIFT_DIR.x, PARTICLE_DRIFT_DIR.y) || 1;
+  const driftX = PARTICLE_DRIFT_DIR.x / driftLen;
+  const driftY = PARTICLE_DRIFT_DIR.y / driftLen;
+  let particles = [];
+
+  const PARTICLE_TINTS = ['255,255,255', '255,255,255', '255,255,255', '255,244,214', '214,232,255'];
+
+  function makeParticle(randomPos) {
+    const depth = Math.pow(Math.random(), PARTICLE_DEPTH_BIAS); // 0=fern/klein, 1=nah/groß
+    return {
+      x: randomPos ? Math.random() * starsCanvas.width : 0,
+      y: randomPos ? Math.random() * starsCanvas.height : 0,
+      depth: depth,
+      radius: 0.5 + depth * 1.9,
+      baseAlpha: 0.12 + depth * 0.6,
+      rgb: PARTICLE_TINTS[Math.floor(Math.random() * PARTICLE_TINTS.length)],
+      sparkle: depth > 0.74,
+      swayPhase: Math.random() * Math.PI * 2,
+      swaySpeed: 0.15 + Math.random() * 0.25,
+      twinklePhase: Math.random() * Math.PI * 2,
+      twinkleSpeed: PARTICLE_TWINKLE_MIN + Math.random() * (PARTICLE_TWINKLE_MAX - PARTICLE_TWINKLE_MIN)
+    };
+  }
+
+  function resizeStars() {
+    starsCanvas.width = window.innerWidth;
+    starsCanvas.height = window.innerHeight;
+    const area = starsCanvas.width * starsCanvas.height;
+    const count = Math.min(PARTICLE_MAX, Math.max(30, Math.round(area / PARTICLE_DENSITY)));
+    particles = [];
+    for (let i = 0; i < count; i++) particles.push(makeParticle(true));
+  }
+
+  function drawParticles(dt, elapsed) {
+    const w = starsCanvas.width, h = starsCanvas.height;
+    starsCtx.clearRect(0, 0, w, h);
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      if (dt > 0) {
+        const speed = PARTICLE_DRIFT_SPEED * (0.12 + p.depth);
+        const perpX = -driftY, perpY = driftX; // senkrecht zur Driftrichtung
+        const swayAmp = 5 * p.depth;
+        const swayVel = swayAmp * p.swaySpeed * Math.cos(elapsed * p.swaySpeed + p.swayPhase);
+        p.x += (driftX * speed + perpX * swayVel) * dt;
+        p.y += (driftY * speed + perpY * swayVel) * dt;
+        if (p.x < -8) p.x += w + 16; else if (p.x > w + 8) p.x -= w + 16;
+        if (p.y < -8) p.y += h + 16; else if (p.y > h + 8) p.y -= h + 16;
+      }
+      const twinkle = 0.5 + 0.5 * Math.sin(elapsed * p.twinkleSpeed + p.twinklePhase);
+      const alpha = p.baseAlpha * (0.35 + 0.65 * twinkle);
+      const rgb = p.rgb;
+
+      const glowR = p.radius * 3.6;
+      const grad = starsCtx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowR);
+      grad.addColorStop(0, 'rgba(' + rgb + ',' + alpha.toFixed(3) + ')');
+      grad.addColorStop(0.35, 'rgba(' + rgb + ',' + (alpha * 0.4).toFixed(3) + ')');
+      grad.addColorStop(1, 'rgba(' + rgb + ',0)');
+      starsCtx.beginPath();
+      starsCtx.arc(p.x, p.y, glowR, 0, Math.PI * 2);
+      starsCtx.fillStyle = grad;
+      starsCtx.fill();
+
+      starsCtx.beginPath();
+      starsCtx.arc(p.x, p.y, p.radius * 0.55, 0, Math.PI * 2);
+      starsCtx.fillStyle = 'rgba(' + rgb + ',' + Math.min(1, alpha * 1.9).toFixed(3) + ')';
+      starsCtx.fill();
+
+      if (p.sparkle) {
+        const arm = p.radius * (3.2 + twinkle * 2.2);
+        const sAlpha = alpha * 0.85;
+        starsCtx.strokeStyle = 'rgba(' + rgb + ',' + sAlpha.toFixed(3) + ')';
+        starsCtx.lineWidth = 0.55;
+        starsCtx.beginPath();
+        starsCtx.moveTo(p.x - arm, p.y);
+        starsCtx.lineTo(p.x + arm, p.y);
+        starsCtx.moveTo(p.x, p.y - arm);
+        starsCtx.lineTo(p.x, p.y + arm);
+        starsCtx.stroke();
+      }
+    }
+  }
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const CX = 50, CY = 50;
+
+  function polarX(cx, r, deg) { return cx + r * Math.sin(deg * Math.PI / 180); }
+  function polarY(cy, r, deg) { return cy - r * Math.cos(deg * Math.PI / 180); }
+
+  function arcPath(cx, cy, r, a1deg, a2deg) {
+    const x1 = polarX(cx, r, a1deg), y1 = polarY(cy, r, a1deg);
+    const x2 = polarX(cx, r, a2deg), y2 = polarY(cy, r, a2deg);
+    const large = ((a2deg - a1deg + 360) % 360) > 180 ? 1 : 0;
+    return 'M ' + x1.toFixed(3) + ' ' + y1.toFixed(3) +
+      ' A ' + r + ' ' + r + ' 0 ' + large + ' 1 ' + x2.toFixed(3) + ' ' + y2.toFixed(3);
+  }
+
+  function lerpColor(hex1, hex2, t) {
+    const c1 = parseInt(hex1.slice(1), 16), c2 = parseInt(hex2.slice(1), 16);
+    const r1 = (c1 >> 16) & 255, g1 = (c1 >> 8) & 255, b1 = c1 & 255;
+    const r2 = (c2 >> 16) & 255, g2 = (c2 >> 8) & 255, b2 = c2 & 255;
+    const r = Math.round(r1 + (r2 - r1) * t);
+    const g = Math.round(g1 + (g2 - g1) * t);
+    const b = Math.round(b1 + (b2 - b1) * t);
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+
+  /* ---------- Gemeinsame Sweep/Pause-Phasenuhr für Hauptring + Kopie-Ring ----------
+     Eine einzige Berechnung aus "elapsed" gespeist -> beide Ringe erhalten exakt
+     dieselben Werte und laufen dadurch garantiert synchron, ohne auseinanderzudriften. */
+  function computeSweepState(elapsed) {
+    const t = (elapsed * 1000) % RING_LOOP_CYCLE_MS;
+    if (t >= RING_LOOP_SWEEP_MS) {
+      return { active: false, activeFloat: 0, globalFade: 0 };
+    }
+    // Linearer Zeitfortschritt 0..1 über die (unveränderte) Sweep-Dauer
+    const linearProgress = t / RING_LOOP_SWEEP_MS;
+    // Ease-In-Out (Cosine) darauf angewendet: Bewegung startet langsam, wird in der Mitte
+    // am schnellsten, bremst zum Ende wieder ab — die Gesamtdauer bleibt exakt gleich,
+    // nur die Verteilung der Bewegung *innerhalb* dieser Dauer ändert sich.
+    const sweepProgress = 0.5 - 0.5 * Math.cos(linearProgress * Math.PI);
+    const activeFloat = sweepProgress * RING_SEGMENTS;
+
+    let globalFade = 1;
+    if (t < RING_LOOP_FADE_MS) {
+      globalFade = 0.5 - 0.5 * Math.cos((t / RING_LOOP_FADE_MS) * Math.PI);
+    } else if (t > RING_LOOP_SWEEP_MS - RING_LOOP_FADE_MS) {
+      const tail = (RING_LOOP_SWEEP_MS - t) / RING_LOOP_FADE_MS;
+      globalFade = 0.5 - 0.5 * Math.cos(tail * Math.PI);
+    }
+    return { active: true, activeFloat: activeFloat, globalFade: globalFade };
+  }
+
+  /* ---------- Hintergrund: transparente Tiefen-Kreise ---------- */
+  function buildBgCircles() {
+    const g = document.getElementById('ringBgLayer');
+    BG_CIRCLES.forEach(function (c) {
+      const el = document.createElementNS(NS, 'circle');
+      el.setAttribute('cx', CX);
+      el.setAttribute('cy', CY);
+      el.setAttribute('r', c.r);
+      el.setAttribute('fill', 'none');
+      el.setAttribute('stroke', '#ffffff');
+      el.setAttribute('stroke-width', 0.4);
+      el.setAttribute('opacity', c.opacity);
+      g.appendChild(el);
+    });
+  }
+
+  /* ---------- Hauptsegmente: 3D-Körper + Kontur + innere Lichtleiste ---------- */
+  const ringPaths = [];        // äußere Kontur (dunkler Rand)
+  const ringBodies = [];       // Hauptkörper (füllt sich per lerpColor)
+  const ringShades = [];       // 3D-Schattenüberlagerung (gradient)
+  const ringInnerLines = [];   // schmale helle Innenlinie
+  const ringInnerCores = [];   // extra scharfer, sehr dünner Kern der Innenlinie
+  const ringShadows = [];      // dezenter Schatten unter dem Segment
+
+  function buildMainRing() {
+    const g = document.getElementById('ringMainLayer');
+    const segAngle = 360 / RING_SEGMENTS;
+    for (let i = 0; i < RING_SEGMENTS; i++) {
+      const a1 = i * segAngle + RING_GAP_DEG / 2;
+      const a2 = (i + 1) * segAngle - RING_GAP_DEG / 2;
+      const d = arcPath(CX, CY, RING_RADIUS, a1, a2);
+
+      // Schattenwurf leicht versetzt nach außen/unten (kräftiger für mehr 3D-Tiefe)
+      const shadow = document.createElementNS(NS, 'path');
+      shadow.setAttribute('d', arcPath(CX, CY + 0.9, RING_RADIUS + 0.5, a1, a2));
+      shadow.setAttribute('fill', 'none');
+      shadow.setAttribute('stroke', '#000000');
+      shadow.setAttribute('stroke-width', RING_STROKE + 2.0);
+      shadow.setAttribute('stroke-linecap', 'round');
+      shadow.setAttribute('opacity', 0.5);
+      g.appendChild(shadow);
+      ringShadows.push(shadow);
+
+      // feine helle Außenkontur (etwas breiter, dahinter liegend)
+      const outline = document.createElementNS(NS, 'path');
+      outline.setAttribute('d', d);
+      outline.setAttribute('fill', 'none');
+      outline.setAttribute('stroke', '#dcdcdc');
+      outline.setAttribute('stroke-width', RING_STROKE + 1.0);
+      outline.setAttribute('stroke-linecap', 'round');
+      outline.setAttribute('opacity', 0.4);
+      g.appendChild(outline);
+      ringPaths.push(outline);
+
+      // Hauptkörper des Segments (dunkler in Ruhe)
+      const body = document.createElementNS(NS, 'path');
+      body.setAttribute('d', d);
+      body.setAttribute('fill', 'none');
+      body.setAttribute('stroke', RING_COLOR_BASE);
+      body.setAttribute('stroke-width', RING_STROKE);
+      body.setAttribute('stroke-linecap', 'round');
+      g.appendChild(body);
+      ringBodies.push(body);
+
+      // 3D-Schattierung (kräftigerer Helligkeitsverlauf oben/innen -> unten/außen)
+      const shade = document.createElementNS(NS, 'path');
+      shade.setAttribute('d', d);
+      shade.setAttribute('fill', 'none');
+      shade.setAttribute('stroke', 'url(#segShade)');
+      shade.setAttribute('stroke-width', RING_STROKE);
+      shade.setAttribute('stroke-linecap', 'round');
+      shade.setAttribute('opacity', 0.95);
+      g.appendChild(shade);
+      ringShades.push(shade);
+
+      // schmale, sehr helle Innenlinie (Energieleiste) mit weichem Glow
+      const inner = document.createElementNS(NS, 'path');
+      inner.setAttribute('d', d);
+      inner.setAttribute('fill', 'none');
+      inner.setAttribute('stroke', INNER_LINE_COLOR_BASE);
+      inner.setAttribute('stroke-width', INNER_LINE_STROKE);
+      inner.setAttribute('stroke-linecap', 'round');
+      inner.setAttribute('filter', 'url(#glowSoft)');
+      g.appendChild(inner);
+      ringInnerLines.push(inner);
+
+      // scharfer, extrem dünner weißer Kern darüber — sorgt für "strahlenden" Look
+      const core = document.createElementNS(NS, 'path');
+      core.setAttribute('d', d);
+      core.setAttribute('fill', 'none');
+      core.setAttribute('stroke', '#ffffff');
+      core.setAttribute('stroke-width', (INNER_LINE_STROKE * 0.4).toFixed(2));
+      core.setAttribute('stroke-linecap', 'round');
+      core.setAttribute('opacity', 0.7);
+      g.appendChild(core);
+      ringInnerCores.push(core);
+    }
+  }
+
+  // Merkt sich pro Segment den zuletzt geschriebenen Filter-Namen, damit setAttribute('filter', ...)
+  // nur bei tatsächlicher Änderung aufgerufen wird — ein Filter-Wechsel zwingt den Browser, das
+  // (teure) Blur-Ergebnis für dieses Element zu verwerfen und neu zu rendern, selbst wenn der neue
+  // Wert identisch zum alten ist. Das ist die Hauptursache für Ruckeln bei mehreren Segmenten x 60fps.
+  const ringMainLastFilter = new Array(RING_SEGMENTS).fill('');
+
+  function updateMainRing(elapsed) {
+    const state = computeSweepState(elapsed);
+
+    if (!state.active) {
+      // Pause-Phase: Hauptring-Segmente auf Ruhezustand zurücksetzen (kein Licht läuft durch)
+      for (let i = 0; i < RING_SEGMENTS; i++) {
+        ringBodies[i].setAttribute('stroke', RING_COLOR_BASE);
+        ringInnerLines[i].setAttribute('stroke', INNER_LINE_COLOR_BASE);
+        if (ringMainLastFilter[i] !== 'strong') {
+          ringInnerLines[i].setAttribute('filter', 'url(#glowStrong)');
+          ringMainLastFilter[i] = 'strong';
+        }
+        ringInnerLines[i].setAttribute('stroke-width', INNER_LINE_STROKE.toFixed(2));
+        ringInnerCores[i].setAttribute('opacity', '0.35');
+        ringPaths[i].setAttribute('opacity', '0.3');
+      }
+      return;
+    }
+
+    for (let i = 0; i < RING_SEGMENTS; i++) {
+      // Symmetrischer Kreisabstand (kürzeste Distanz in beide Richtungen), statt nur
+      // rückwärtigem Schweif -> Licht verteilt sich gleichmäßig auf beide Nachbarn.
+      let d = Math.abs(state.activeFloat - i);
+      d = Math.min(d, RING_SEGMENTS - d);
+      const raw = Math.max(0, 1 - d / RING_LOOP_TRAIL);
+      const intensity = raw * raw * (3 - 2 * raw); // smoothstep: Nachbar (d=1) landet bei 50%
+      const t = intensity * state.globalFade;
+
+      // Early-Exit: Segment ist optisch nicht mehr vom Ruhezustand unterscheidbar ->
+      // überspringt die teure Farbinterpolation & mehrere setAttribute-Calls komplett.
+      if (t < 0.01) {
+        if (ringMainLastFilter[i] !== 'strong') {
+          ringBodies[i].setAttribute('stroke', RING_COLOR_BASE);
+          ringInnerLines[i].setAttribute('stroke', INNER_LINE_COLOR_BASE);
+          ringInnerLines[i].setAttribute('filter', 'url(#glowStrong)');
+          ringInnerLines[i].setAttribute('stroke-width', INNER_LINE_STROKE.toFixed(2));
+          ringInnerCores[i].setAttribute('opacity', '0.35');
+          ringPaths[i].setAttribute('opacity', '0.3');
+          ringMainLastFilter[i] = 'strong';
+        }
+        continue;
+      }
+
+      const bodyColor = lerpColor(RING_COLOR_BASE, RING_COLOR_LIT, t * 0.5);
+      ringBodies[i].setAttribute('stroke', bodyColor);
+
+      const innerColor = lerpColor(INNER_LINE_COLOR_BASE, INNER_LINE_COLOR_LIT, t);
+      ringInnerLines[i].setAttribute('stroke', innerColor);
+
+      const wantIntense = t > 0.35;
+      const wantName = wantIntense ? 'intense' : 'strong';
+      if (ringMainLastFilter[i] !== wantName) {
+        ringInnerLines[i].setAttribute('filter', wantIntense ? 'url(#glowIntense)' : 'url(#glowStrong)');
+        ringMainLastFilter[i] = wantName;
+      }
+      ringInnerLines[i].setAttribute('stroke-width', (INNER_LINE_STROKE + t * 0.9).toFixed(2));
+
+      ringInnerCores[i].setAttribute('opacity', (0.35 + t * 0.65).toFixed(2));
+
+      ringPaths[i].setAttribute('opacity', (0.3 + t * 0.35).toFixed(2));
+    }
+  }
+
+  /* ---------- Transparenter Kopie-Ring innerhalb des Hauptrings ----------
+     Selbe Segment-Aufteilung wie der Hauptring, aber näher an dessen
+     Innenkante, größer im relativen Verhältnis, komplett transparent
+     gefüllt — nur ein dünner heller Rand ist sichtbar. */
+  const innerCopyLines = [];
+  function buildInnerCopyRing() {
+    const g = document.getElementById('ringInnerCopyLayer');
+    const segAngle = 360 / RING_SEGMENTS;
+    for (let i = 0; i < RING_SEGMENTS; i++) {
+      const a1 = i * segAngle + RING_GAP_DEG / 2;
+      const a2 = (i + 1) * segAngle - RING_GAP_DEG / 2;
+      const d = arcPath(CX, CY, INNER_COPY_RADIUS, a1, a2);
+
+      const line = document.createElementNS(NS, 'path');
+      line.setAttribute('d', d);
+      line.setAttribute('fill', 'none');
+      line.setAttribute('stroke', INNER_COPY_COLOR_BASE);
+      line.setAttribute('stroke-width', INNER_COPY_STROKE);
+      line.setAttribute('stroke-linecap', 'round');
+      line.setAttribute('filter', 'url(#glowSoft)');
+      g.appendChild(line);
+      innerCopyLines.push(line);
+    }
+  }
+
+  // Merkt sich pro Segment den zuletzt geschriebenen Filter-Namen — vermeidet unnötige
+  // setAttribute('filter', ...)-Aufrufe, die den Browser zum Neu-Rendern des Blurs zwingen.
+  const innerCopyLastFilter = new Array(RING_SEGMENTS).fill('');
+
+  function updateInnerCopyRing(elapsed) {
+    // Nutzt dieselbe Sweep/Pause-Berechnung wie der Hauptring (computeSweepState) —
+    // dadurch garantiert exakt synchron, beide Ringe leuchten gleichzeitig auf und
+    // verschwinden gleichzeitig in der Pause.
+    const state = computeSweepState(elapsed);
+
+    if (!state.active) {
+      for (let i = 0; i < RING_SEGMENTS; i++) {
+        innerCopyLines[i].setAttribute('opacity', 0);
+      }
+      return;
+    }
+
+    for (let i = 0; i < RING_SEGMENTS; i++) {
+      // Symmetrischer Kreisabstand — identisch zum Hauptring, für einen einheitlich
+      // breiten, weichen Lichtschweif auf beiden Ringen.
+      let d = Math.abs(state.activeFloat - i);
+      d = Math.min(d, RING_SEGMENTS - d);
+      const raw = Math.max(0, 1 - d / RING_LOOP_TRAIL);
+      const intensity = raw * raw * (3 - 2 * raw); // smoothstep: Nachbar (d=1) landet bei 50%
+      const t = intensity * state.globalFade;
+
+      // Early-Exit: Segment ist optisch praktisch aus -> teure Farbinterpolation überspringen.
+      if (t < 0.01) {
+        innerCopyLines[i].setAttribute('opacity', 0);
+        continue;
+      }
+
+      const c = lerpColor(INNER_COPY_COLOR_BASE, INNER_COPY_COLOR_LIT, t);
+      innerCopyLines[i].setAttribute('stroke', c);
+      innerCopyLines[i].setAttribute('opacity', (0.15 + t * 0.85).toFixed(3));
+
+      const wantIntense = t > 0.35;
+      const wantName = wantIntense ? 'intense' : 'soft';
+      if (innerCopyLastFilter[i] !== wantName) {
+        innerCopyLines[i].setAttribute('filter', wantIntense ? 'url(#glowIntense)' : 'url(#glowSoft)');
+        innerCopyLastFilter[i] = wantName;
+      }
+      innerCopyLines[i].setAttribute('stroke-width', (INNER_COPY_STROKE + t * 0.5).toFixed(2));
+    }
+  }
+
+  /* ---------- Dünner Zusatzring direkt außerhalb (unterbrochene Bögen) ---------- */
+  let outer1Group;
+  function buildOuter1() {
+    outer1Group = document.getElementById('ringOuterLayer1');
+    const segAngle = 360 / OUTER1_ARC_COUNT;
+    for (let i = 0; i < OUTER1_ARC_COUNT; i++) {
+      const a1 = i * segAngle + OUTER1_ARC_GAP_DEG / 2;
+      const a2 = (i + 1) * segAngle - OUTER1_ARC_GAP_DEG / 2;
+      const d = arcPath(CX, CY, OUTER1_RADIUS, a1, a2);
+
+      const p = document.createElementNS(NS, 'path');
+      p.setAttribute('d', d);
+      p.setAttribute('fill', 'none');
+      p.setAttribute('stroke', OUTER1_COLOR);
+      p.setAttribute('stroke-width', OUTER1_STROKE);
+      p.setAttribute('stroke-linecap', 'round');
+      p.setAttribute('opacity', OUTER1_OPACITY);
+      p.setAttribute('filter', 'url(#glowSoft)');
+      outer1Group.appendChild(p);
+
+      // scharfer heller Kern darüber für kräftigeres Leuchten
+      const core = document.createElementNS(NS, 'path');
+      core.setAttribute('d', d);
+      core.setAttribute('fill', 'none');
+      core.setAttribute('stroke', '#ffffff');
+      core.setAttribute('stroke-width', (OUTER1_STROKE * 0.5).toFixed(2));
+      core.setAttribute('stroke-linecap', 'round');
+      core.setAttribute('opacity', 0.55);
+      outer1Group.appendChild(core);
+    }
+  }
+
+  /* ---------- Zweiter äußerer Bogenring, asymmetrisch ---------- */
+  let outer2Group;
+  const outer2NodeSpecs = [];
+  function buildOuter2() {
+    outer2Group = document.getElementById('ringOuterLayer2');
+    OUTER2_ARCS.forEach(function (arc, idx) {
+      const a1 = arc[0], a2 = arc[0] + arc[1];
+      const d = arcPath(CX, CY, OUTER2_RADIUS, a1, a2);
+
+      const p = document.createElementNS(NS, 'path');
+      p.setAttribute('d', d);
+      p.setAttribute('fill', 'none');
+      p.setAttribute('stroke', OUTER2_COLOR);
+      p.setAttribute('stroke-width', OUTER2_STROKE);
+      p.setAttribute('stroke-linecap', 'round');
+      p.setAttribute('opacity', OUTER2_OPACITY);
+      p.setAttribute('filter', 'url(#glowSoft)');
+      outer2Group.appendChild(p);
+
+      // scharfer heller Kern darüber für kräftigeres Leuchten
+      const core = document.createElementNS(NS, 'path');
+      core.setAttribute('d', d);
+      core.setAttribute('fill', 'none');
+      core.setAttribute('stroke', '#ffffff');
+      core.setAttribute('stroke-width', (OUTER2_STROKE * 0.5).toFixed(2));
+      core.setAttribute('stroke-linecap', 'round');
+      core.setAttribute('opacity', 0.45);
+      outer2Group.appendChild(core);
+
+      // an jedem zweiten Bogenende einen Knoten platzieren
+      if (idx % 2 === 0) outer2NodeSpecs.push(a2);
+    });
+  }
+
+  /* ---------- Leuchtende Knotenpunkte an ausgewählten Bogenenden ---------- */
+  let nodeGroup;
+  const nodeEls = [];
+  function buildNodes() {
+    nodeGroup = document.getElementById('ringNodes');
+    outer2NodeSpecs.forEach(function (deg) {
+      const x = polarX(CX, OUTER2_RADIUS, deg), y = polarY(CY, OUTER2_RADIUS, deg);
+      const stubX = polarX(CX, OUTER2_RADIUS + 2.6, deg), stubY = polarY(CY, OUTER2_RADIUS + 2.6, deg);
+
+      const stub = document.createElementNS(NS, 'line');
+      stub.setAttribute('x1', x); stub.setAttribute('y1', y);
+      stub.setAttribute('x2', stubX); stub.setAttribute('y2', stubY);
+      stub.setAttribute('stroke', NODE_COLOR);
+      stub.setAttribute('stroke-width', 0.4);
+      stub.setAttribute('opacity', 0.5);
+      nodeGroup.appendChild(stub);
+
+      const dot = document.createElementNS(NS, 'circle');
+      dot.setAttribute('cx', x); dot.setAttribute('cy', y);
+      dot.setAttribute('r', NODE_RADIUS);
+      dot.setAttribute('fill', NODE_COLOR);
+      dot.setAttribute('filter', 'url(#glowNode)');
+      nodeGroup.appendChild(dot);
+      nodeEls.push({ dot: dot, phase: Math.random() * Math.PI * 2 });
+    });
+  }
+
+  /* ---------- Punkte-Ringe: zwei gleichmäßige, cleane Kreise auf unterschiedlichen Radien ---------- */
+  let dotGroup, dotGroup2;
+  const dotEls = [];
+  const dotEls2 = [];
+
+  function buildDotScale() {
+    // Ring 1: cleaner, gleichmäßig verteilter Punktering — keine Gruppen, kein Jitter,
+    // schlank und aufgeräumt statt überladen.
+    dotGroup = document.getElementById('ringDotScale');
+    const baseStep = 360 / DOT_SCALE_COUNT;
+    let hiliteSlots = {};
+    while (Object.keys(hiliteSlots).length < DOT_SCALE_HILITE_COUNT) {
+      hiliteSlots[Math.floor(Math.random() * DOT_SCALE_COUNT)] = true;
+    }
+    for (let i = 0; i < DOT_SCALE_COUNT; i++) {
+      const deg = i * baseStep;
+      const hilite = !!hiliteSlots[i];
+      const x = polarX(CX, DOT_SCALE_RADIUS, deg), y = polarY(CY, DOT_SCALE_RADIUS, deg);
+
+      const dot = document.createElementNS(NS, 'circle');
+      dot.setAttribute('cx', x); dot.setAttribute('cy', y);
+      dot.setAttribute('r', hilite ? DOT_SCALE_HILITE_SIZE : DOT_SCALE_RADIUS_SIZE);
+      dot.setAttribute('fill', hilite ? '#ffffff' : DOT_SCALE_COLOR);
+      dot.setAttribute('opacity', hilite ? 1 : 0.6);
+      dot.setAttribute('filter', hilite ? 'url(#glowNode)' : 'url(#glowSoft)');
+      dotGroup.appendChild(dot);
+      dotEls.push(dot);
+    }
+
+    // Ring 2 (NEU): weiter außen, alle Punkte durchgehend weiß.
+    dotGroup2 = document.getElementById('ringDotScale2');
+    const baseStep2 = 360 / DOT_SCALE2_COUNT;
+    let hiliteSlots2 = {};
+    while (Object.keys(hiliteSlots2).length < DOT_SCALE2_HILITE_COUNT) {
+      hiliteSlots2[Math.floor(Math.random() * DOT_SCALE2_COUNT)] = true;
+    }
+    for (let i = 0; i < DOT_SCALE2_COUNT; i++) {
+      const deg = i * baseStep2;
+      const hilite = !!hiliteSlots2[i];
+      const x = polarX(CX, DOT_SCALE2_RADIUS, deg), y = polarY(CY, DOT_SCALE2_RADIUS, deg);
+
+      const dot = document.createElementNS(NS, 'circle');
+      dot.setAttribute('cx', x); dot.setAttribute('cy', y);
+      dot.setAttribute('r', hilite ? DOT_SCALE2_HILITE_SIZE : DOT_SCALE2_SIZE);
+      dot.setAttribute('fill', '#ffffff');
+      dot.setAttribute('opacity', hilite ? 1 : DOT_SCALE2_OPACITY);
+      dot.setAttribute('filter', hilite ? 'url(#glowNode)' : 'url(#glowSoft)');
+      dotGroup2.appendChild(dot);
+      dotEls2.push(dot);
+    }
+  }
+
+  /* ---------- Radiale Tick-Markierungen ---------- */
+  function buildTicks() {
+    const g = document.getElementById('ringTicks');
+    for (let i = 0; i < TICK_COUNT; i++) {
+      const deg = (360 / TICK_COUNT) * i;
+      const x1 = polarX(CX, TICK_RADIUS_INNER, deg), y1 = polarY(CY, TICK_RADIUS_INNER, deg);
+      const x2 = polarX(CX, TICK_RADIUS_OUTER, deg), y2 = polarY(CY, TICK_RADIUS_OUTER, deg);
+      const line = document.createElementNS(NS, 'line');
+      line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+      line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+      line.setAttribute('stroke', TICK_COLOR);
+      line.setAttribute('stroke-width', 0.35);
+      line.setAttribute('opacity', TICK_OPACITY);
+      g.appendChild(line);
+    }
+  }
+
+  function buildRing() {
+    buildBgCircles();
+    buildMainRing();
+    buildInnerCopyRing();
+    buildOuter1();
+    buildOuter2();
+    buildNodes();
+    buildDotScale();
+    buildTicks();
+  }
+
+  function updateRing(activeFloat, elapsed) {
+    updateMainRing(elapsed);
+    updateInnerCopyRing(elapsed);
+
+    outer1Group.setAttribute('transform',
+      'rotate(' + ((elapsed * OUTER1_SPIN_SPEED * 180 / Math.PI) % 360).toFixed(2) + ' ' + CX + ' ' + CY + ')');
+    outer2Group.setAttribute('transform',
+      'rotate(' + ((elapsed * OUTER2_SPIN_SPEED * 180 / Math.PI) % 360).toFixed(2) + ' ' + CX + ' ' + CY + ')');
+    dotGroup.setAttribute('transform',
+      'rotate(' + ((elapsed * DOT_SCALE_SPIN_SPEED * 180 / Math.PI) % 360).toFixed(2) + ' ' + CX + ' ' + CY + ')');
+    dotGroup2.setAttribute('transform',
+      'rotate(' + ((elapsed * DOT_SCALE2_SPIN_SPEED * 180 / Math.PI) % 360).toFixed(2) + ' ' + CX + ' ' + CY + ')');
+
+    for (let i = 0; i < nodeEls.length; i++) {
+      const n = nodeEls[i];
+      const pulse = 0.55 + 0.45 * Math.sin(elapsed * 1.6 + n.phase);
+      n.dot.setAttribute('opacity', pulse.toFixed(2));
+      n.dot.setAttribute('r', (NODE_RADIUS * (0.8 + pulse * 0.4)).toFixed(2));
+    }
+  }
+
+  function measureCharAspect() {
+    const rect = probe.getBoundingClientRect();
+    const count = probe.textContent.length;
+    const widthPerCharAt200 = rect.width / count;
+    return widthPerCharAt200 / 200; // line-height:1 -> height at fontSize 200 ist 200
+  }
+
+  const charAspect = measureCharAspect() || BASE_CHAR_ASPECT;
+  const ROWS = Math.max(20, Math.round(BASE_ROWS * charAspect / BASE_CHAR_ASPECT));
+  const SCALE_Y = SCALE_X * charAspect;
+  buildRing();
+
+  const poly = buildPolygon();
+  const points = buildPoints(poly);
+  const zbuf = new Float32Array(COLS * ROWS);
+  const buf = new Array(COLS * ROWS).fill(' ');
+
+  function renderFrame(angleY, angleX) {
+    zbuf.fill(-Infinity);
+    buf.fill(' ');
+    const cosY = Math.cos(angleY), sinY = Math.sin(angleY);
+    const cosX = Math.cos(angleX), sinX = Math.sin(angleX);
+    const halfCols = COLS / 2, halfRows = ROWS / 2;
+
+    for (let i = 0; i < points.length; i += 6) {
+      const px = points[i], py = points[i + 1], pz = points[i + 2];
+      const pnx = points[i + 3], pny = points[i + 4], pnz = points[i + 5];
+
+      const x1 = px * cosY + pz * sinY;
+      const z1 = -px * sinY + pz * cosY;
+      const nx1 = pnx * cosY + pnz * sinY;
+      const nz1 = -pnx * sinY + pnz * cosY;
+
+      const y2 = py * cosX - z1 * sinX;
+      const z2 = py * sinX + z1 * cosX;
+      const ny2 = pny * cosX - nz1 * sinX;
+      const nz2 = pny * sinX + nz1 * cosX;
+
+      if (nz2 <= 0) continue;
+      const zc = CAM_DIST - z2;
+      if (zc <= 0.1) continue;
+      const ooz = 1 / zc;
+
+      const xp = Math.round(halfCols + SCALE_X * ooz * x1);
+      const yp = Math.round(halfRows - SCALE_Y * ooz * y2);
+      if (xp < 0 || xp >= COLS || yp < 0 || yp >= ROWS) continue;
+
+      const idx = yp * COLS + xp;
+      if (ooz > zbuf[idx]) {
+        zbuf[idx] = ooz;
+        let lum = nx1 * LIGHT.x + ny2 * LIGHT.y + nz2 * LIGHT.z;
+        if (lum < -1) lum = -1; else if (lum > 1) lum = 1;
+        let t = (lum + 1) / 2;
+        t = Math.pow(t, RAMP_GAMMA);
+        const tt = INVERT_RAMP ? t : (1 - t);
+        let ci = 1 + Math.round(tt * (RAMP.length - 2));
+        if (ci < 1) ci = 1; else if (ci > RAMP.length - 1) ci = RAMP.length - 1;
+        buf[idx] = RAMP[ci];
+      }
+    }
+
+    const rowsOut = new Array(ROWS);
+    for (let r = 0; r < ROWS; r++) {
+      rowsOut[r] = buf.slice(r * COLS, r * COLS + COLS).join('');
+    }
+    pre.textContent = rowsOut.join('\n');
+  }
+
+  function fitLayout() {
+    const availW = window.innerWidth * SIZE_FRACTION;
+    const availH = window.innerHeight * SIZE_FRACTION;
+    const outer = Math.max(20, Math.min(availW, availH));
+
+    ringSvg.style.width = outer + 'px';
+    ringSvg.style.height = outer + 'px';
+
+    const starBox = outer * STAR_FRACTION_OF_RING;
+    const fsForWidth = starBox / (COLS * charAspect);
+    const fsForHeight = starBox / ROWS;
+    const fs = Math.max(2, Math.min(fsForWidth, fsForHeight));
+    pre.style.fontSize = fs + 'px';
+  }
+  window.addEventListener('resize', fitLayout);
+  fitLayout();
+  window.addEventListener('resize', resizeStars);
+  resizeStars();
+
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (reduceMotion) {
+    renderFrame(0.5, FIXED_TILT);
+    updateRing(0, 0);
+    drawParticles(0, 0);
+  } else {
+    let angleY = 0;
+    let elapsed = 0;
+    let lastT = null;
+    function tick(now) {
+      if (lastT === null) lastT = now;
+      const dt = Math.min(0.05, (now - lastT) / 1000);
+      lastT = now;
+      elapsed += dt;
+      angleY += dt * SPIN_SPEED;
+      renderFrame(angleY, FIXED_TILT);
+      updateRing(0, elapsed);
+      drawParticles(dt, elapsed);
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="color-scheme" content="light">
+<title>Logo</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: #000000;
+    overflow: hidden;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    opacity: 0;
+    animation: fadeIn 0.8s ease-out 0.1s forwards;
+  }
+  @keyframes fadeIn {
+    to { opacity: 1; }
+  }
+  #logo, #probe {
+    font-family: "Courier New", Consolas, Monaco, monospace;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0;
+    white-space: pre;
+  }
+  #logo {
+    color: #ffffff;
+    background: #000000;
+    margin: 0;
+    user-select: none;
+    text-align: center;
+  }
+  #probe {
+    position: absolute;
+    visibility: hidden;
+    left: -9999px;
+    top: 0;
+    font-size: 200px;
+  }
+</style>
+</head>
+<body>
+<pre id="logo"></pre>
+<span id="probe">MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM</span>
+<script>
+(function () {
+  'use strict';
+
+  /* =========================================================
+     KONFIGURATION – hier lässt sich das Logo anpassen
+     ========================================================= */
+
+  // Sternform – 6 Zacken + 6 Kerben, Winkel (Grad) & Länge direkt aus der
+  // Logo-Vorlage vermessen (Kontur-Analyse, links/rechts symmetrisiert).
+  // [Winkel, Radius] abwechselnd Zacke/Kerbe, im Kreis sortiert.
+  const STAR_VERTICES = [
+    [ 18.838, 0.3346], // Kerbe
+    [ 30.818, 0.6747], // Zacke (oben rechts)
+    [ 56.967, 0.2546], // Kerbe
+    [ 90.000, 0.9054], // Zacke (oben)
+    [123.033, 0.2546], // Kerbe
+    [149.182, 0.6747], // Zacke (oben links)
+    [161.162, 0.3346], // Kerbe
+    [196.034, 1.0000], // Zacke (unten links, längste)
+    [218.512, 0.2108], // Kerbe
+    [270.000, 0.8740], // Zacke (unten)
+    [321.488, 0.2108], // Kerbe
+    [343.966, 1.0000]  // Zacke (unten rechts, längste)
+  ];
+
+  const DEPTH        = 0.20;  // "Dicke" des 3D-Körpers
+  const SPIN_SPEED    = 0.85; // Rotationsgeschwindigkeit um die Y-Achse (rad/Sek.)
+  const FIXED_TILT    = 0.18; // feste Kamera-Neigung (rad) - bewegt sich nicht mehr
+
+  const RAMP = " .:-=+*#%@";  // Zeichen von "hell" nach "dunkel"
+  const RAMP_GAMMA = 1.5;     // >1 = insgesamt kräftiger/dunkler
+
+  const COLS = 62;            // Zeichen-Raster Breite (höher = dichter/detaillierter)
+  const SCALE_X = 91;
+  const BASE_ROWS = 30;
+  const BASE_CHAR_ASPECT = 0.4545;
+  const CAM_DIST = 3.4;
+  const SIZE_FRACTION = 0.48; // wie viel vom Bildschirm das Logo einnimmt (kleiner Wert = kleiner)
+  const INVERT_RAMP = true;   // true = helle Zeichen auf dunklem Hintergrund
+
+  const LIGHT = normalize({ x: 0.35, y: 0.55, z: 0.78 });
+
+  /* ========================================================= */
+
+  function normalize(v) {
+    const l = Math.hypot(v.x, v.y, v.z);
+    return { x: v.x / l, y: v.y / l, z: v.z / l };
+  }
+
+  function buildPolygon() {
+    return STAR_VERTICES.map(function (v) {
+      const rad = v[0] * Math.PI / 180;
+      const r = v[1];
+      return { x: r * Math.cos(rad), y: r * Math.sin(rad) };
+    });
+  }
+
+  function edgeOutwardNormal(p1, p2) {
+    const ex = p2.x - p1.x, ey = p2.y - p1.y;
+    let nx = ey, ny = -ex;
+    const len = Math.hypot(nx, ny) || 1;
+    nx /= len; ny /= len;
+    const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+    if (nx * mx + ny * my < 0) { nx = -nx; ny = -ny; }
+    return { nx: nx, ny: ny };
+  }
+
+  function boundaryRadius(theta, poly) {
+    const dx = Math.cos(theta), dy = Math.sin(theta);
+    const n = poly.length;
+    for (let i = 0; i < n; i++) {
+      const p1 = poly[i], p2 = poly[(i + 1) % n];
+      const ex = p2.x - p1.x, ey = p2.y - p1.y;
+      const denom = ex * dy - ey * dx;
+      if (Math.abs(denom) < 1e-9) continue;
+      const t = (ex * p1.y - ey * p1.x) / denom;
+      const s = (dx * p1.y - dy * p1.x) / denom;
+      if (t > 1e-6 && s >= -1e-6 && s <= 1 + 1e-6) return t;
+    }
+    return 0;
+  }
+
+  const ANGLE_STEPS = 320, RADIAL_STEPS = 34, EDGE_STEPS = 68, DEPTH_STEPS = 10;
+
+  function buildPoints(poly) {
+    const flat = [];
+    const halfD = DEPTH / 2;
+    for (let ai = 0; ai < ANGLE_STEPS; ai++) {
+      const theta = (ai / ANGLE_STEPS) * Math.PI * 2;
+      const R = boundaryRadius(theta, poly);
+      const cx = Math.cos(theta), cy = Math.sin(theta);
+      for (let ri = 1; ri <= RADIAL_STEPS; ri++) {
+        const t = ri / RADIAL_STEPS;
+        const x = cx * R * t, y = cy * R * t;
+        flat.push(x, y, halfD, 0, 0, 1);
+        flat.push(x, y, -halfD, 0, 0, -1);
+      }
+    }
+    const n = poly.length;
+    for (let i = 0; i < n; i++) {
+      const p1 = poly[i], p2 = poly[(i + 1) % n];
+      const nrm = edgeOutwardNormal(p1, p2);
+      for (let si = 0; si <= EDGE_STEPS; si++) {
+        const s = si / EDGE_STEPS;
+        const x = p1.x + (p2.x - p1.x) * s;
+        const y = p1.y + (p2.y - p1.y) * s;
+        for (let di = 0; di <= DEPTH_STEPS; di++) {
+          const z = -halfD + (di / DEPTH_STEPS) * DEPTH;
+          flat.push(x, y, z, nrm.nx, nrm.ny, 0);
+        }
+      }
+    }
+    return new Float32Array(flat);
+  }
+
+  /* ---------- DOM / Messung ---------- */
+
+  const pre = document.getElementById('logo');
+  const probe = document.getElementById('probe');
+
+  function measureCharAspect() {
+    const rect = probe.getBoundingClientRect();
+    const count = probe.textContent.length;
+    const widthPerCharAt200 = rect.width / count;
+    return widthPerCharAt200 / 200; // line-height:1 -> height at fontSize 200 ist 200
+  }
+
+  const charAspect = measureCharAspect() || BASE_CHAR_ASPECT;
+  const ROWS = Math.max(20, Math.round(BASE_ROWS * charAspect / BASE_CHAR_ASPECT));
+  const SCALE_Y = SCALE_X * charAspect;
+
+  const poly = buildPolygon();
+  const points = buildPoints(poly);
+  const zbuf = new Float32Array(COLS * ROWS);
+  const buf = new Array(COLS * ROWS).fill(' ');
+
+  function renderFrame(angleY, angleX) {
+    zbuf.fill(-Infinity);
+    buf.fill(' ');
+    const cosY = Math.cos(angleY), sinY = Math.sin(angleY);
+    const cosX = Math.cos(angleX), sinX = Math.sin(angleX);
+    const halfCols = COLS / 2, halfRows = ROWS / 2;
+
+    for (let i = 0; i < points.length; i += 6) {
+      const px = points[i], py = points[i + 1], pz = points[i + 2];
+      const pnx = points[i + 3], pny = points[i + 4], pnz = points[i + 5];
+
+      const x1 = px * cosY + pz * sinY;
+      const z1 = -px * sinY + pz * cosY;
+      const nx1 = pnx * cosY + pnz * sinY;
+      const nz1 = -pnx * sinY + pnz * cosY;
+
+      const y2 = py * cosX - z1 * sinX;
+      const z2 = py * sinX + z1 * cosX;
+      const ny2 = pny * cosX - nz1 * sinX;
+      const nz2 = pny * sinX + nz1 * cosX;
+
+      if (nz2 <= 0) continue;
+      const zc = CAM_DIST - z2;
+      if (zc <= 0.1) continue;
+      const ooz = 1 / zc;
+
+      const xp = Math.round(halfCols + SCALE_X * ooz * x1);
+      const yp = Math.round(halfRows - SCALE_Y * ooz * y2);
+      if (xp < 0 || xp >= COLS || yp < 0 || yp >= ROWS) continue;
+
+      const idx = yp * COLS + xp;
+      if (ooz > zbuf[idx]) {
+        zbuf[idx] = ooz;
+        let lum = nx1 * LIGHT.x + ny2 * LIGHT.y + nz2 * LIGHT.z;
+        if (lum < -1) lum = -1; else if (lum > 1) lum = 1;
+        let t = (lum + 1) / 2;
+        t = Math.pow(t, RAMP_GAMMA);
+        const tt = INVERT_RAMP ? t : (1 - t);
+        let ci = 1 + Math.round(tt * (RAMP.length - 2));
+        if (ci < 1) ci = 1; else if (ci > RAMP.length - 1) ci = RAMP.length - 1;
+        buf[idx] = RAMP[ci];
+      }
+    }
+
+    const rowsOut = new Array(ROWS);
+    for (let r = 0; r < ROWS; r++) {
+      rowsOut[r] = buf.slice(r * COLS, r * COLS + COLS).join('');
+    }
+    pre.textContent = rowsOut.join('\n');
+  }
+
+  function fitFontSize() {
+    const availW = window.innerWidth * SIZE_FRACTION;
+    const availH = window.innerHeight * SIZE_FRACTION;
+    const fsForWidth = availW / (COLS * charAspect);
+    const fsForHeight = availH / ROWS;
+    const fs = Math.max(2.5, Math.min(fsForWidth, fsForHeight));
+    pre.style.fontSize = fs + 'px';
+  }
+  window.addEventListener('resize', fitFontSize);
+  fitFontSize();
+
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (reduceMotion) {
+    renderFrame(0.5, FIXED_TILT);
+  } else {
+    let angleY = 0;
+    let lastT = null;
+    function tick(now) {
+      if (lastT === null) lastT = now;
+      const dt = Math.min(0.05, (now - lastT) / 1000);
+      lastT = now;
+      angleY += dt * SPIN_SPEED;
+      renderFrame(angleY, FIXED_TILT);
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+})();
+</script>
+</body>
+</html>

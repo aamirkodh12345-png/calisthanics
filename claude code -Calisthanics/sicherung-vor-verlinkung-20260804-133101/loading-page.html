@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#E8492B">
+<title>FLOW — Lädt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ember:#E8492B;
+    --font-display:'Inter',system-ui,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    background:var(--ember);
+    overflow:hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:var(--font-display);
+    transition:opacity .6s cubic-bezier(.6,0,.2,1);
+  }
+  body.fade-out{opacity:0;}
+
+  #stage{
+    position:relative;
+    width:100%;
+    height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  .word{
+    position:absolute;
+    left:50%; top:50%;
+    transform:translate(-50%,-50%);
+    font-weight:900;
+    text-transform:uppercase;
+    white-space:nowrap;
+    font-size:clamp(22px, 9.2vw, 78px);
+    letter-spacing:-.01em;
+    line-height:1;
+    user-select:none;
+  }
+
+  /* Das feste, komplett schwarze Wort — bleibt immer im Zentrum */
+  #core-word{
+    color:#000;
+    z-index:5;
+    opacity:0;
+    animation:core-in .5s cubic-bezier(.19,1,.22,1) .05s both;
+  }
+  @keyframes core-in{
+    from{ opacity:0; transform:translate(-50%,-50%) scale(.94); }
+    to{ opacity:1; transform:translate(-50%,-50%) scale(1); }
+  }
+
+  /* Outline-Kopien: schwarzer Rand, transparente Füllung -> Orange scheint durch */
+  .ghost{
+    color:transparent;
+    -webkit-text-stroke:2px #000;
+    text-stroke:2px #000;
+    z-index:4;
+    opacity:0;
+    transform:translate(-50%,-50%);
+    transition:transform 1s cubic-bezier(.16,1,.3,1), opacity .35s ease-out;
+  }
+  .ghost.on{ opacity:.9; }
+  .ghost.returning{ transition:transform .45s cubic-bezier(.5,0,.75,0), opacity .35s ease-out; }
+  .ghost.leave{ opacity:0 !important; transition:opacity .25s ease-in; }
+
+  /* mobil: dünnerer Rand */
+  @media (max-width:520px){
+    .ghost{-webkit-text-stroke:1.4px #000; text-stroke:1.4px #000;}
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div class="word" id="core-word">Calisthenics</div>
+  <!-- 8 Ghost-Kopien werden per JS erzeugt: 4 oben, 4 unten, alle starten im Zentrum -->
+</div>
+
+<script>
+(function(){
+  const stage = document.getElementById('stage');
+  const WORD = 'Calisthenics';
+  const N = 4; // pro Seite (oben/unten)
+
+  // vertikaler Versatz-Schritt in vh, je Reihe weiter nach außen
+  const STEP = 6.2;
+
+  const ghosts = [];
+  for(let side = 0; side < 2; side++){        // 0 = oben, 1 = unten
+    for(let i = 0; i < N; i++){
+      const el = document.createElement('div');
+      el.className = 'word ghost';
+      el.textContent = WORD;
+      stage.appendChild(el);
+      ghosts.push({ el, side, i });
+    }
+  }
+
+  // Start: alle exakt im Zentrum (0-Versatz), unsichtbar
+  ghosts.forEach(g => {
+    g.el.style.transform = 'translate(-50%,-50%) translateY(0)';
+  });
+
+  function targetY(side, i){
+    const dist = (i + 1) * STEP; // vh
+    const dir = side === 0 ? -1 : 1; // oben = negativ, unten = positiv
+    return (dir * dist) + 'vh';
+  }
+
+  // Sequenziell von innen (i=0, dichteste Reihe) nach außen (i=3),
+  // oben und unten exakt synchron (Spiegel), innerhalb von ~1s.
+  const stepDelay = 130; // ms zwischen den Reihen
+  const outDur = 1000;   // Dauer der Rausfahr-Transition (ms, s. CSS .ghost)
+  const holdDur = 600;   // wie lange die Wörter außen stehen bleiben
+  const returnDur = 450; // schnelleres Zurückfahren zur Mitte
+
+  requestAnimationFrame(()=>{
+    for(let i = 0; i < N; i++){
+      setTimeout(()=>{
+        ghosts.forEach(g=>{
+          if(g.i === i){
+            g.el.classList.add('on');
+            g.el.style.transform = `translate(-50%,-50%) translateY(${targetY(g.side, g.i)})`;
+          }
+        });
+      }, i * stepDelay);
+    }
+  });
+
+  const lastRowStart = (N - 1) * stepDelay;
+  const outEnd = lastRowStart + outDur;       // alle Reihen vollständig draußen
+  const returnStart = outEnd + holdDur;       // 0.6s Stillstand, dann zurück
+  const returnEnd = returnStart + returnDur;  // zurück im Zentrum
+
+  // Zurück zur Mitte — schnell, alle gleichzeitig
+  setTimeout(()=>{
+    ghosts.forEach(g=>{
+      g.el.classList.add('returning');
+      g.el.style.transform = 'translate(-50%,-50%) translateY(0)';
+    });
+  }, returnStart);
+
+  // Sobald sie in der Mitte angekommen sind: verschwinden + Kernwort ausfaden
+  setTimeout(()=>{
+    ghosts.forEach(g => g.el.classList.add('leave'));
+    document.getElementById('core-word').style.transition = 'opacity .3s ease-in';
+    document.getElementById('core-word').style.opacity = '0';
+  }, returnEnd);
+
+  setTimeout(()=>{
+    document.body.classList.add('fade-out');
+  }, returnEnd + 400);
+
+  // Platzhalter: hier würde nach dem Fade zur nächsten Seite (Anmeldung) weitergeleitet.
+  // setTimeout(()=>{ window.location.href = 'auth.html'; }, returnEnd + 1000);
+})();
+</script>
+
+</body>
+</html>
